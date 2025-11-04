@@ -1,0 +1,140 @@
+-- case study on flight dataset---
+-- find the month with most number of flights 
+-- which week day has most costly flights 
+-- find number of indigo flights everymonth
+-- find list of all the departs between 10am and 2pm from deldi to bangaore
+-- fing the number of flights depating on weekends from bangalore 
+-- calculatr the arrival time for all flights by adding duration to the departure time
+-- find number of flights which travel on multiple dates 
+
+use flights;
+select  monthname(Date_of_Journey),count(*) from `cleaned_flights.csv`
+group by monthname(Date_of_Journey);
+
+select dayname(Date_of_Journey),avg(Price) from `cleaned_flights.csv`
+where dayname(Date_of_Journey)!= "Saturdat" and dayname(Date_of_Journey)!="Sunday"
+group by dayname(Date_of_Journey)
+order by sum(Price) desc;
+
+
+select monthname(Date_of_Journey), count(*) from `cleaned_flights.csv`
+where Airline='Indigo'
+group by monthname(Date_of_Journey)
+order by count(*) desc;
+
+
+-- find list of all the departs between 10am and 2pm from deldi to bangaore
+select * from  `cleaned_flights.csv`
+where (STR_TO_DATE(Dep_Time, '%H:%i') between '10' and '2') 
+AND Source ='delhi' AND destination = 'bangalore';
+
+-- find the number of flights depating on weekends from bangalore 
+select * from `cleaned_flights.csv`
+where source = "Banglore" and (dayname(Date_of_Journey)='Saturday' or dayname(Date_of_Journey)='Sunday');
+
+
+
+-- clculate arrival time
+
+use flights ;
+alter table cleaned_flights 
+
+-- created a new column with arrival time having none
+add column arrival_time datetime;
+select * from cleaned_flights;
+
+
+-- concatenated date of journey and converted to date time datatype
+SELECT str_to_date(concat(Date_of_Journey," ",Dep_Time) , '%Y-%m-%d %H:%i')FROM flights.`cleaned_flights`;
+
+-- created new column  names date_with time having nonwe values
+alter table cleaned_flights 
+add column date_with_time datetime ;
+
+-- updated table by adding values date with time 
+update cleaned_flights 
+set  date_with_time =str_to_date(concat(Date_of_Journey," ",Dep_Time) , '%Y-%m-%d %H:%i');
+
+-- calculate arrival time by adding date and departure time with duration 
+select  date_with_time , duration ,adddate(date_with_time , interval Duration minute) from  cleaned_flights;
+
+-- updated table by adding values in arrival time column
+update cleaned_flights 
+set arrival_time = adddate(date_with_time , interval Duration minute) ;
+
+-- arrival time
+select time(arrival_time) from cleaned_flights;
+
+-- arrival date
+select date (arrival_time) from cleaned_flights ;
+
+-- find number of flights which travel on multiple dates 
+select * from cleaned_flights 
+where date(date_with_time) != date(arrival_time);
+
+
+-- calculate avarage duration of flights with all city pairs using window functions 
+select Source , Destination ,avg(Duration) over (partition by Source , Destination ) from cleaned_flights ;
+
+-- using group by 
+select Source , Destination , time_format(sec_to_time( avg(duration)*60),'%kh %im') from cleaned_flights
+
+group  by Source , Destination ;
+
+-- fibd all flights wich departed before midnight and arrived at their destination after midnight
+select * from cleaned_flights  where Total_Stops = 'non-stop'and date(departure_date) < date(arrival_time); 
+
+-- find quater wise number of flights for each airline 
+
+select quarter(departure_date),airline,count(*) from cleaned_flights 
+group by quarter(departure_date),airline;
+
+-- find the longest flight distance (between cities in terms of time) in india 
+select min(departure_date), max(arrival_time) from cleaned_flights;
+
+-- avg time between flights that have 1 stop vs more than one stop 
+with temp as( select * ,
+case 
+when Total_Stops= '1 stop' then Total_Stops  else 'many-stops_and_no_stops' end as temp
+from cleaned_flights)
+ select temp,str_to_date(time_format(sec_to_time(avg(duration)*60),'%kh:%im'),'%kh:%im') from temp
+ group by temp;
+
+-- avg time between flights that have 0 stop vs more than one stop or one stop
+with temp as( select * ,
+case 
+when Total_Stops= 'non-stop' then Total_Stops  else 'many-stops_and_1_stop' end as temp
+from cleaned_flights)
+ select temp,str_to_date(time_format(sec_to_time(avg(duration)*60),'%kh:%im'),'%kh:%im') from temp
+ group by temp;
+ 
+ 
+ -- find all air india flughts in a given date range(1 MARCH 2019 TO10 MARCH 2019 origenating from delhi 
+ 
+ select * from cleaned_flights 
+ where Airline='Air India' AND date(departure_date) between '2019-03-1' AND'2019-03-10';
+ 
+ 
+ -- FIND THE LONGEST FLIGHT OF EACH AIRLINE 
+ SELECT  Airline,time_format(sec_to_time(max(duration)* 60),'%kh %im' )FROM  cleaned_flights
+Group by Airline 
+order by max(duration) desc;
+
+--  time_format(sec_to_time(max(duration)* 60),'%kh %im' ) here order by wont work because we have con-verted it to column
+-- not a datetime or nu,eric anymore  
+SELECT  Airline,time_format(sec_to_time(max(duration)* 60),'%kh %im' )FROM  cleaned_flights
+Group by Airline 
+order by time_format(sec_to_time(max(duration)* 60),'%kh %im' ) desc;
+
+-- 	18. Make a weekday vs time grid showing avg flight price from Banglore and Delhi
+SELECT 
+    DAYNAME(departure_date) AS day_name,
+    AVG(CASE WHEN HOUR(departure_date) BETWEEN 0 AND 5 THEN price END) AS `12AM - 6AM`,
+    AVG(CASE WHEN HOUR(departure_date) BETWEEN 6 AND 11 THEN price END) AS `6AM - 12PM`,
+    AVG(CASE WHEN HOUR(departure_date) BETWEEN 12 AND 17 THEN price END) AS `12PM - 6PM`,
+    AVG(CASE WHEN HOUR(departure_date) BETWEEN 18 AND 23 THEN price END) AS `6PM - 12AM`
+FROM cleaned_flights
+WHERE source = 'Banglore' 
+  AND destination = 'Delhi'
+GROUP BY DAYOFWEEK(departure_date), DAYNAME(departure_date)
+ORDER BY DAYOFWEEK(departure_date) ASC;
